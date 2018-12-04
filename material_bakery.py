@@ -19,7 +19,7 @@
 bl_info = {
     "name": "Material Bakery",
     "author": "Nigel Munro",
-    "version": (0, 5, 1),
+    "version": (0, 6, 0),
     "blender": (2, 80, 0),
     "location": "Properties > Material > Material Bakery",
     "warning": "",
@@ -71,11 +71,8 @@ class MatBake_Panel(bpy.types.Panel):
         row = layout.row()
         row.prop(obj, "name")
         
-        
 
-        
         row = layout.row()
-        #col = row.column()
         row.prop(context.scene, "bakery_resolution")
         
         row = layout.row()
@@ -92,23 +89,21 @@ class MatBake_Panel(bpy.types.Panel):
         col.prop(context.scene, "bakery_normals")
         
         row = layout.row()
-        #row.prop(context.scene, "bakery_out_uv")
         row.prop_search(context.scene, "bakery_out_uv", obj.data, "uv_layers")
         
         row = layout.row()
         row.prop(context.scene, "bakery_out_directory")
         
         
-        
         #row = layout.row()
         #row.prop(context.scene, "uv_bake_alpha_color")
         
-        op = layout.operator("mesh.bake_mat", text="Create Maps")
-        
+        op = layout.operator("material.mat_bake_create_maps", text="Create Maps")
+
+        op = layout.operator("material.mat_bake_bake_maps", text="Bake Maps")
         
         #row.prop(self, "resolution")
         #row.props_enum(self, "resolution")
-        #print("hjkhj " + self.interpolation)
         #row.prop(obj, "location")
 
         #row = layout.row()
@@ -117,37 +112,10 @@ class MatBake_Panel(bpy.types.Panel):
         
 
 class MatBake_CreateMaps(Operator):
-    bl_idname = 'mesh.bake_mat'
+    bl_idname = 'material.mat_bake_create_maps'
     bl_label = "Create Maps"
     bl_description = "Create texture maps"
     #bl_options = {'REGISTER', 'UNDO'}
-    
-    
-
-    cubic_strength: FloatProperty(
-        name="Strength",
-        description="Higher strength results in more fluid curves",
-        default=1.0,
-        soft_min=-3.0,
-        soft_max=3.0
-        )
-    min_width: IntProperty(
-        name="Minimum width",
-        description="Segments with an edge smaller than this are merged "
-                    "(compared to base edge)",
-        default=0,
-        min=0,
-        max=100,
-        subtype='PERCENTAGE'
-        )
-    mode: EnumProperty(
-        name="Mode",
-        items=(('basic', "Basic", "Fast algorithm"),
-               ('shortest', "Shortest edge", "Slower algorithm with better vertex matching")),
-        description="Algorithm used for bridging",
-        default='shortest'
-        )
-
 
     @classmethod
     def poll(cls, context):
@@ -165,7 +133,7 @@ class MatBake_CreateMaps(Operator):
     
     def execute(self, context):
         # initialise
-        print("executing " + self.interpolation)
+        print("executing Create Maps")
         
         size = 512, 512
         
@@ -198,10 +166,39 @@ class MatBake_CreateMaps(Operator):
         
         
         return{'FINISHED'}
+
+
+class MatBake_BakeMaps(Operator):
+    bl_idname = 'material.mat_bake_bake_maps'
+    bl_label = "Bake Maps"
+    bl_description = "Bake out selected texture maps."
+
+
+    @classmethod
+    def poll(cls, context):
+        ob = context.active_object
+        return (ob and ob.type == 'MESH') # and context.mode == 'EDIT_MESH'
+
+    def draw(self, context):
+        layout = self.layout
+        
+        # cleaning up
+        terminate(global_undo)
+
+        return{'FINISHED'}
+    
+    def execute(self, context):
+        # initialise
+        print("executing Bake")
+        
+        bpy.ops.object.bake(type='DIFFUSE')
+        
+        return{'FINISHED'}
         
     
 classes = (
     MatBake_CreateMaps,
+    MatBake_BakeMaps,
     MatBake_Panel
 )
 
