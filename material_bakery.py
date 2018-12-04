@@ -50,10 +50,10 @@ from bpy.props import (
         StringProperty,
         )
 
-class HelloWorldPanel(bpy.types.Panel):
+class MatBake_Panel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
     bl_label = "Material Bakery"
-    bl_idname = "OBJECT_PT_hello"
+    bl_idname = "OBJECT_PT_matBake"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "material"
@@ -72,23 +72,24 @@ class HelloWorldPanel(bpy.types.Panel):
         row.prop(obj, "name")
         
         
-        #row = layout.row()
-        #row.prop(obj, "uvmap")
 
         
-        
-        #row = layout.row()
-        #row.prop(op, "interpolation", text="")
-        
-        
+        row = layout.row()
+        #col = row.column()
+        row.prop(context.scene, "bakery_resolution")
         
         row = layout.row()
         col = row.column()
-        col.prop(context.scene, "bakery_resolution")
-        
-        #row = layout.row()
+        col.prop(context.scene, "bakery_albedo")
         col = row.column()
         col.prop(context.scene, "bakery_albedo_alpha")
+
+
+        row = layout.row()
+        col = row.column()
+        col.prop(context.scene, "bakery_roughness")
+        col = row.column()
+        col.prop(context.scene, "bakery_normals")
         
         row = layout.row()
         #row.prop(context.scene, "bakery_out_uv")
@@ -102,7 +103,7 @@ class HelloWorldPanel(bpy.types.Panel):
         #row = layout.row()
         #row.prop(context.scene, "uv_bake_alpha_color")
         
-        op = layout.operator("mesh.bake_mat", text="Create Material")
+        op = layout.operator("mesh.bake_mat", text="Create Maps")
         
         
         #row.prop(self, "resolution")
@@ -115,11 +116,11 @@ class HelloWorldPanel(bpy.types.Panel):
         
         
 
-class Bridge(Operator):
+class MatBake_CreateMaps(Operator):
     bl_idname = 'mesh.bake_mat'
-    bl_label = "Bridge / Loft"
-    bl_description = "Bridge two, or loft several, loops of vertices"
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_label = "Create Maps"
+    bl_description = "Create texture maps"
+    #bl_options = {'REGISTER', 'UNDO'}
     
     
 
@@ -200,13 +201,15 @@ class Bridge(Operator):
         
     
 classes = (
-    Bridge,
+    MatBake_CreateMaps,
+    MatBake_Panel
 )
 
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-    bpy.utils.register_class(HelloWorldPanel)
+
+    #bpy.utils.register_class(HelloWorldPanel)
     
     
     bpy.types.Scene.bakery_resolution = IntProperty(
@@ -229,11 +232,29 @@ def register():
         description="Output Drectory for created map",
         subtype="DIR_PATH"
         )
+
+    bpy.types.Scene.bakery_albedo = BoolProperty(
+        name="Albedo",
+        description="Bake Albedo",
+        default=True
+        )
         
     bpy.types.Scene.bakery_albedo_alpha = BoolProperty(
         name="Alpha Albedo",
         description="Add alpha channel to base color map",
         default=False
+        )
+    
+    bpy.types.Scene.bakery_roughness = BoolProperty(
+        name="Roughness",
+        description="Bake Roughness",
+        default=True
+        )
+    
+    bpy.types.Scene.bakery_normals = BoolProperty(
+        name="Roughness",
+        description="Bake Normals",
+        default=True
         )
         
     bpy.types.Scene.bakery_out_uv = StringProperty(
@@ -245,12 +266,15 @@ def register():
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    bpy.utils.unregister_class(HelloWorldPanel)
+    #bpy.utils.unregister_class(HelloWorldPanel)
     
     del bpy.types.Scene.uv_bake_alpha_color
     del bpy.types.Scene.bakery_resolution
     del bpy.types.Scene.bakery_out_directory
+    del bpy.types.Scene.bakery_albedo
     del bpy.types.Scene.bakery_albedo_alpha
+    del bpy.types.Scene.bakery_roughness
+    del bpy.types.Scene.bakery_normals
     del bpy.types.Scene.bakery_out_uv
 
 
