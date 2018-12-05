@@ -53,7 +53,7 @@ from bpy.props import (
 class MatBake_Panel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
     bl_label = "Material Bakery"
-    bl_idname = "OBJECT_PT_matBake"
+    bl_idname = "MATBAKE_PT_main"
     bl_space_type = 'PROPERTIES'
     bl_region_type = 'WINDOW'
     bl_context = "material"
@@ -170,14 +170,14 @@ class MatBake_CreateMaps(Operator):
 
 class MatBake_BakeMaps(Operator):
     bl_idname = 'material.mat_bake_bake_maps'
-    bl_label = "Bake Maps"
-    bl_description = "Bake out selected texture maps."
+    bl_label = "Bake Maps(Cycles Only)"
+    bl_description = "Bake out selected texture maps(Cycles Only)."
 
 
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return (ob and ob.type == 'MESH') # and context.mode == 'EDIT_MESH'
+        return (ob and ob.type == 'MESH' and context.scene.render.engine == 'CYCLES') # and context.mode == 'EDIT_MESH'
 
     def draw(self, context):
         layout = self.layout
@@ -190,6 +190,11 @@ class MatBake_BakeMaps(Operator):
     def execute(self, context):
         # initialise
         print("executing Bake")
+
+        if context.scene.bakery_albedo:
+            print("bake albedo")
+        else:
+            print("bake")
         
         bpy.ops.object.bake(type='DIFFUSE')
         
@@ -217,7 +222,7 @@ def register():
         max=8192,
         )
     
-    bpy.types.Scene.uv_bake_alpha_color = FloatVectorProperty(
+    bpy.types.Scene.bakery_alpha_color = FloatVectorProperty(
         name="Alpha Color",
         description="Color to be used for transparency",
         subtype='COLOR',
@@ -265,7 +270,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
     #bpy.utils.unregister_class(HelloWorldPanel)
     
-    del bpy.types.Scene.uv_bake_alpha_color
+    del bpy.types.Scene.bakery_alpha_color
     del bpy.types.Scene.bakery_resolution
     del bpy.types.Scene.bakery_out_directory
     del bpy.types.Scene.bakery_albedo
