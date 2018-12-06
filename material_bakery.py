@@ -67,6 +67,14 @@ def findUVBakeNode(nodes, context):
                 return None
     return node_uv_map
 
+
+#def saveTexture(context, image, format, name, dir):
+    #filepath_raw = dir + "/" + name
+    #image.filepath_raw = "/tmp/temp.png"
+    #image.file_format = format#'PNG'
+    #image.save()
+    
+
 class MatBake_Panel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
     bl_label = "Material Bakery"
@@ -110,6 +118,9 @@ class MatBake_Panel(bpy.types.Panel):
 
         row = layout.row()
         row.prop(context.scene, "bakery_tex_name")
+
+        row = layout.row()
+        row.prop(context.scene, "bakery_out_format")
         
         row = layout.row()
         row.prop(context.scene, "bakery_out_directory")
@@ -172,10 +183,15 @@ class MatBake_CreateMaps(Operator):
         h = context.scene.bakery_resolution
 
         img_col = None
+        img_rgh = None
+        img_nrm = None
+
         if context.scene.bakery_col:
-            img_col = bpy.data.images.new("Map_col", width=w, height=h)
-        img_rgh = bpy.data.images.new("Map_rgh", width=w, height=h)
-        img_nrm = bpy.data.images.new("Map_nrm", width=w, height=h)
+            img_col = bpy.data.images.new(context.scene.bakery_tex_name + "_col", width=w, height=h)
+        if context.scene.bakery_roughness:
+            img_rgh = bpy.data.images.new(context.scene.bakery_tex_name + "_rgh", width=w, height=h)
+        if context.scene.bakery_normals:
+            img_nrm = bpy.data.images.new(context.scene.bakery_tex_name + "_nrm", width=w, height=h)
 
         links = mat.node_tree.links
 
@@ -244,7 +260,6 @@ class MatBake_BakeMaps(Operator):
 
         node_uv_map = findUVBakeNode(nodes, context)
 
-
         col = None
         rgh = None
         nrm = None
@@ -309,11 +324,9 @@ class MatBake_BakeMaps(Operator):
 
         if len(bsdf_prin.inputs[0].links) > 0:
             in_base_col = bsdf_prin.inputs[0].links[0].from_node
-        else:
-            self.report({'INFO'}, "Could not find BSDF Principled Base Col input")
-            
-
-
+        #else:
+        #    self.report({'INFO'}, "Could not find BSDF Principled Base Col input")
+        
         in_nrm = None
         in_nrm_tex = None
 
@@ -423,6 +436,14 @@ def register():
         min=0,
         max=8192,
         )
+    
+    bpy.types.Scene.bakery_out_format = EnumProperty(
+        name="Out Format",
+        items=(("PNG", "PNG", "PNG file format"),
+              ("JPEG", "JPEG", "JPEG file format")),
+        description="Output file format",
+        default='PNG'
+        )
 
 
 def unregister():
@@ -440,6 +461,7 @@ def unregister():
     del bpy.types.Scene.bakery_out_uv
     del bpy.types.Scene.bakery_tex_name
     del bpy.types.Scene.bakery_margin
+    del bpy.types.Scene.bakery_out_format
 
 
 if __name__ == "__main__":
