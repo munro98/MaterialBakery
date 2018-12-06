@@ -128,7 +128,7 @@ class MatBake_CreateMaps(Operator):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return (ob and ob.type == 'MESH') # and context.mode == 'EDIT_MESH'
+        return (ob and ob.type == 'MESH' and bpy.context.scene.bakery_out_uv != '') # and context.mode == 'EDIT_MESH'
 
     def draw(self, context):
         layout = self.layout
@@ -155,10 +155,10 @@ class MatBake_CreateMaps(Operator):
 
         # create node
         node_uv_map = nodes.new(type='ShaderNodeUVMap')
-        #node_uv_map.uvmap = context.scene.bakery_out_uv
+        node_uv_map.uv_map = context.scene.bakery_out_uv
 
-        w = 512
-        h = 512
+        w = context.scene.bakery_resolution
+        h = context.scene.bakery_resolution
 
         img_col = bpy.data.images.new("Map_col", width=w, height=h)
         img_rgh = bpy.data.images.new("Map_rgh", width=w, height=h)
@@ -272,7 +272,7 @@ def register():
         )
     
     bpy.types.Scene.bakery_normals = BoolProperty(
-        name="Roughness",
+        name="Normals",
         description="Bake Normals",
         default=True
         )
