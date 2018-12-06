@@ -30,6 +30,8 @@ bl_info = {
 }
 
 
+# TODO Iterate materials, break down tasks into smaller functions, move out graph to props position
+
 import bpy
 
 from bpy.types import (
@@ -100,6 +102,12 @@ class MatBake_Panel(bpy.types.Panel):
         
         op = layout.operator("material.mat_bake_create_maps", text="Create Maps")
 
+        row = layout.row()
+        row.prop(bpy.context.scene.cycles, "samples")
+
+        row = layout.row()
+        row.prop(context.scene, "bakery_margin")
+
         op = layout.operator("material.mat_bake_bake_maps", text="Bake Maps")
         
         #row.prop(self, "resolution")
@@ -133,6 +141,7 @@ class MatBake_CreateMaps(Operator):
     
     def execute(self, context):
         # initialise
+        
         print("executing Create Maps")
         
         size = 512, 512
@@ -262,6 +271,14 @@ def register():
     bpy.types.Scene.bakery_out_uv = StringProperty(
         name="Output UV",
         description="Select the UV Map used to bake"
+        )
+
+    bpy.types.Scene.bakery_margin = IntProperty(
+        name="Bake Margin",
+        description="Bake Margin",
+        default=16,
+        min=0,
+        max=8192,
         )
 
 
