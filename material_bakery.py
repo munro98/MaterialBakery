@@ -19,7 +19,7 @@
 bl_info = {
     "name": "Material Bakery",
     "author": "Nigel Munro",
-    "version": (0, 8, 2),
+    "version": (0, 9, 0),
     "blender": (2, 80, 0),
     "location": "Properties > Material > Material Bakery",
     "warning": "",
@@ -80,13 +80,13 @@ class MatBake_Panel(bpy.types.Panel):
 
         obj = context.object
 
-        row = layout.row()
-        row.label(text="Hello world!", icon='WORLD_DATA')
+        #row = layout.row()
+        #row.label(text="Hello world!", icon='WORLD_DATA')
 
         row = layout.row()
-        row.label(text="Active object is: " + obj.name)
-        row = layout.row()
-        row.prop(obj, "name")
+        row.label(text="Active Object: " + obj.name)
+        #row = layout.row()
+        #row.prop(obj, "name")
         
 
         row = layout.row()
@@ -107,6 +107,9 @@ class MatBake_Panel(bpy.types.Panel):
         
         row = layout.row()
         row.prop_search(context.scene, "bakery_out_uv", obj.data, "uv_layers")
+
+        row = layout.row()
+        row.prop(context.scene, "bakery_tex_name")
         
         row = layout.row()
         row.prop(context.scene, "bakery_out_directory")
@@ -117,10 +120,10 @@ class MatBake_Panel(bpy.types.Panel):
         op = layout.operator("material.mat_bake_create_maps", text="Create Maps")
 
         row = layout.row()
-        row.prop(bpy.context.scene.cycles, "samples")
-
-        row = layout.row()
-        row.prop(context.scene, "bakery_margin")
+        col = row.column()
+        col.prop(bpy.context.scene.cycles, "samples")
+        col = row.column()
+        col.prop(context.scene, "bakery_margin")
 
         op = layout.operator("material.mat_bake_bake_maps", text="Bake Maps")
         
@@ -168,15 +171,17 @@ class MatBake_CreateMaps(Operator):
         w = context.scene.bakery_resolution
         h = context.scene.bakery_resolution
 
-        img_col = bpy.data.images.new("Map_col", width=w, height=h)
+        img_col = None
+        if context.scene.bakery_col:
+            img_col = bpy.data.images.new("Map_col", width=w, height=h)
         img_rgh = bpy.data.images.new("Map_rgh", width=w, height=h)
         img_nrm = bpy.data.images.new("Map_nrm", width=w, height=h)
 
         links = mat.node_tree.links
 
-
-        col = nodes.new(type='ShaderNodeTexImage')
-        col.image = img_col
+        if context.scene.bakery_col:
+            col = nodes.new(type='ShaderNodeTexImage')
+            col.image = img_col
 
         link = links.new(node_uv_map.outputs[0], col.inputs[0])
 
@@ -281,11 +286,11 @@ class MatBake_BakeMaps(Operator):
 
         if col:
             nodes.active = col
-            bpy.ops.object.bake(type='DIFFUSE')
+            bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
 
         if rgh:
             nodes.active = rgh
-            bpy.ops.object.bake(type='ROUGHNESS')
+            bpy.ops.object.bake(type='ROUGHNESS', margin=context.scene.bakery_margin)
 
 
         bsdf_prin = None
@@ -328,17 +333,19 @@ class MatBake_BakeMaps(Operator):
                 link = links.new(in_nrm_tex.outputs[0], bsdf_prin.inputs[0])
 
                 nodes.active = nrm
-                bpy.ops.object.bake(type='DIFFUSE')
-                #save
+                bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
+                #save?
 
                 if in_base_col is None:
                     links.remove(bsdf_prin.inputs[0].links[0])
                 else:
                     link = links.new(in_base_col.outputs[0], bsdf_prin.inputs[0])
             else:
-                print("Could not find BSDF Principled normal texture input2")
+                #print("Could not find BSDF Principled normal texture input2")
+                self.report({'INFO'}, "Could not find BSDF Principled normal texture input")
         else:
-            print("Could not find BSDF Principled normal texture input")
+            self.report({'INFO'}, "Could not find BSDF Principled normal input node")
+            #print("Could not find BSDF Principled normal texture input")
         
         return{'FINISHED'}
         
@@ -403,6 +410,12 @@ def register():
         description="Select the UV Map to be baked onto"
         )
 
+    bpy.types.Scene.bakery_tex_name = StringProperty(
+        name="Texture Name",
+        description="Name of the baked texture maps",
+        default="tex"
+        )
+
     bpy.types.Scene.bakery_margin = IntProperty(
         name="Bake Margin",
         description="Bake Margin",
@@ -425,6 +438,8 @@ def unregister():
     del bpy.types.Scene.bakery_roughness
     del bpy.types.Scene.bakery_normals
     del bpy.types.Scene.bakery_out_uv
+    del bpy.types.Scene.bakery_tex_name
+    del bpy.types.Scene.bakery_margin
 
 
 if __name__ == "__main__":
