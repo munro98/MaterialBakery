@@ -142,36 +142,45 @@ class MatBake_CreateMaps(Operator):
     def execute(self, context):
         # initialise
         
-        print("executing Create Maps")
+        print("Executing Create Maps")
         
-        size = 512, 512
-        
-        image = bpy.data.images.new("MyImage", width=size[0], height=size[1])
+        ob = bpy.context.active_object
 
-        ## For white image
-        # pixels = [1.0] * (4 * size[0] * size[1])
+        # Get material
+        mat = ob.data.materials[0]
 
-        pixels = [None] * size[0] * size[1]
-        for x in range(size[0]):
-            for y in range(size[1]):
-                # assign RGBA to something useful
-                r = x / size[0]
-                g = y / size[1]
-                b = (1 - r) * g
-                a = 1.0
+        mat.use_nodes=True
 
-                pixels[(y * size[0]) + x] = [r, g, b, a]
+        nodes=mat.node_tree.nodes
 
-        # flatten list
-        pixels = [chan for px in pixels for chan in px]
+        # create node
+        node_uv_map = nodes.new(type='ShaderNodeUVMap')
+        #node_uv_map.uvmap = context.scene.bakery_out_uv
 
-        # assign pixels
-        image.pixels = pixels
+        w = 512
+        h = 512
 
-        # write image
-        image.filepath_raw = "/tmp/temp.png"
-        image.file_format = 'PNG'
-        image.save()
+        img_col = bpy.data.images.new("Map_col", width=w, height=h)
+        img_rgh = bpy.data.images.new("Map_rgh", width=w, height=h)
+        img_nrm = bpy.data.images.new("Map_nrm", width=w, height=h)
+
+        links = mat.node_tree.links
+
+
+        col = nodes.new(type='ShaderNodeTexImage')
+        col.image = img_col
+
+        link = links.new(node_uv_map.outputs[0], col.inputs[0])
+
+        rgh = nodes.new(type='ShaderNodeTexImage')
+        rgh.image = img_rgh
+
+        link = links.new(node_uv_map.outputs[0], rgh.inputs[0])
+
+        nrm = nodes.new(type='ShaderNodeTexImage')
+        nrm.image = img_nrm
+
+        link = links.new(node_uv_map.outputs[0], nrm.inputs[0])
         
         
         return{'FINISHED'}
