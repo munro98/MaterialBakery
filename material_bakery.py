@@ -214,7 +214,124 @@ class MatBake_BakeMaps(Operator):
         else:
             print("bake")
         
-        bpy.ops.object.bake(type='DIFFUSE')
+
+        ob = bpy.context.active_object
+
+        # Get material
+        mat_plane = ob.data.materials[0]
+
+        links = mat_plane.node_tree.links
+
+        mat_plane.use_nodes=True
+        nodes=mat_plane.node_tree.nodes
+
+        node_uv_map = None
+
+        for node in nodes:
+            print(node.type)
+            if node_uv_map is None:
+                if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
+                    node_uv_map = node
+            else:
+                if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
+                    print("already found!")
+
+
+        col = None
+        rgh = None
+        nrm = None
+
+        outCounter = 0
+        outLinks = len(node_uv_map.outputs[0].links)
+
+        if outCounter < outLinks:
+            for link in node_uv_map.outputs[0].links:
+                node = link.to_node
+                if node.type == 'TEX_IMAGE' and node.image.name.endswith('_col'):
+                    col = node
+                    break
+                
+        outCounter = outCounter + 1
+
+        if outCounter < outLinks:
+            for link in node_uv_map.outputs[0].links:
+                node = link.to_node
+                if node.type == 'TEX_IMAGE' and node.image.name.endswith('_rgh'):
+                    rgh = node
+                    break
+
+        outCounter = outCounter + 1
+
+        if outCounter < outLinks:
+            for link in node_uv_map.outputs[0].links:
+                node = link.to_node
+                if node.type == 'TEX_IMAGE' and node.image.name.endswith('_nrm'):
+                    nrm = node
+                    break
+
+
+        nodes.active = None
+
+        if col:
+            nodes.active = col
+            bpy.ops.object.bake(type='DIFFUSE')
+
+        if rgh:
+            nodes.active = rgh
+            bpy.ops.object.bake(type='ROUGHNESS')
+
+
+        bsdf_prin = None
+
+        for n in nodes:
+            if bsdf_prin == None:
+                if n.type == 'BSDF_PRINCIPLED':
+                    bsdf_prin = n
+            else:
+                if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
+                    self.report({'INFO'}, "Found multiple bsdf principled shaders in material graph")
+                    #return {'CANCELLED'}
+
+
+        in_base_col = None
+
+        if len(bsdf_prin.inputs[0].links) > 0:
+            in_base_col = bsdf_prin.inputs[0].links[0].from_node
+        else:
+            print("in color empty")
+            
+
+
+        in_nrm = None
+        in_nrm_tex = None
+
+        if len(bsdf_prin.inputs[17].links) > 0:
+            in_nrm = bsdf_prin.inputs[17].links[0].from_node
+            
+            if in_nrm.type == 'NORMAL_MAP':
+                if len(bsdf_prin.inputs[17].links) > 0:
+                    n = bsdf_prin.inputs[17].links[0].from_node
+                    
+                    if len(n.inputs[1].links) > 0:
+                        n2 = n.inputs[1].links[0].from_node
+                        if n2.type:
+                            in_nrm_tex = n2
+
+            if in_nrm_tex is not None:
+                link = links.new(in_nrm_tex.outputs[0], bsdf_prin.inputs[0])
+
+                nodes.active = nrm
+                bpy.ops.object.bake(type='DIFFUSE')
+                #save
+
+                if in_base_col is None:
+                    links.remove(bsdf_prin.inputs[0].links[0])
+                else:
+                    link = links.new(in_base_col.outputs[0], bsdf_prin.inputs[0])
+            else:
+                print("Could not find BSDF Principled normal texture input2")
+        else:
+            print("Could not find BSDF Principled normal texture input")
         
         return{'FINISHED'}
         
