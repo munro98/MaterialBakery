@@ -19,7 +19,7 @@
 bl_info = {
     "name": "Material Bakery",
     "author": "Nigel Munro",
-    "version": (0, 6, 0),
+    "version": (0, 8, 2),
     "blender": (2, 80, 0),
     "location": "Properties > Material > Material Bakery",
     "warning": "",
@@ -30,7 +30,8 @@ bl_info = {
 }
 
 
-# TODO Iterate materials, break down tasks into smaller functions, move out graph to props position
+# TODO implement multiple materials per object, break down tasks into smaller functions, move bake node graph to proper locations
+# find node input/output by names instead of indexes?
 
 import bpy
 
@@ -51,6 +52,20 @@ from bpy.props import (
         PointerProperty,
         StringProperty,
         )
+
+def findUVBakeNode(nodes, context):
+    node_uv_map = None
+
+    for node in nodes:
+        if node_uv_map is None:
+            if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
+                node_uv_map = node
+        else:
+            if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
+                print("More than 1 UVMap node found")
+                #self.report({'INFO'}, "More than 1 UVMap node found")
+                return None
+    return node_uv_map
 
 class MatBake_Panel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
@@ -79,9 +94,9 @@ class MatBake_Panel(bpy.types.Panel):
         
         row = layout.row()
         col = row.column()
-        col.prop(context.scene, "bakery_albedo")
+        col.prop(context.scene, "bakery_col")
         col = row.column()
-        col.prop(context.scene, "bakery_albedo_alpha")
+        col.prop(context.scene, "bakery_col_alpha")
 
 
         row = layout.row()
@@ -96,7 +111,6 @@ class MatBake_Panel(bpy.types.Panel):
         row = layout.row()
         row.prop(context.scene, "bakery_out_directory")
         
-        
         #row = layout.row()
         #row.prop(context.scene, "uv_bake_alpha_color")
         
@@ -110,12 +124,6 @@ class MatBake_Panel(bpy.types.Panel):
 
         op = layout.operator("material.mat_bake_bake_maps", text="Bake Maps")
         
-        #row.prop(self, "resolution")
-        #row.props_enum(self, "resolution")
-        #row.prop(obj, "location")
-
-        #row = layout.row()
-        #row.operator("mesh.primitive_cube_add")
         
         
 
@@ -128,7 +136,7 @@ class MatBake_CreateMaps(Operator):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return (ob and ob.type == 'MESH' and bpy.context.scene.bakery_out_uv != '') # and context.mode == 'EDIT_MESH'
+        return (ob and ob.type == 'MESH' and bpy.context.scene.bakery_out_uv != '')
 
     def draw(self, context):
         layout = self.layout
@@ -195,7 +203,13 @@ class MatBake_BakeMaps(Operator):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return (ob and ob.type == 'MESH' and context.scene.render.engine == 'CYCLES') # and context.mode == 'EDIT_MESH'
+
+        ob = bpy.context.active_object
+        mat = ob.data.materials[0]
+        nodes=mat.node_tree.nodes
+        node_uv_map = findUVBakeNode(nodes, context)
+
+        return (ob and ob.type == 'MESH' and context.scene.render.engine == 'CYCLES' and node_uv_map is not None) 
 
     def draw(self, context):
         layout = self.layout
@@ -207,34 +221,23 @@ class MatBake_BakeMaps(Operator):
     
     def execute(self, context):
         # initialise
-        print("executing Bake")
+        print("Executing Bake")
 
-        if context.scene.bakery_albedo:
-            print("bake albedo")
-        else:
-            print("bake")
+        #if context.scene.bakery_col:
+        #    print("bake albedo")
+        #else:
+        #    print("bake")
         
 
         ob = bpy.context.active_object
 
         # Get material
-        mat_plane = ob.data.materials[0]
+        mat = ob.data.materials[0]
+        links = mat.node_tree.links
+        mat.use_nodes=True
+        nodes=mat.node_tree.nodes
 
-        links = mat_plane.node_tree.links
-
-        mat_plane.use_nodes=True
-        nodes=mat_plane.node_tree.nodes
-
-        node_uv_map = None
-
-        for node in nodes:
-            print(node.type)
-            if node_uv_map is None:
-                if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
-                    node_uv_map = node
-            else:
-                if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
-                    print("already found!")
+        node_uv_map = findUVBakeNode(nodes, context)
 
 
         col = None
@@ -272,6 +275,10 @@ class MatBake_BakeMaps(Operator):
 
         nodes.active = None
 
+        bpy.context.scene.render.bake.use_pass_direct = False
+        bpy.context.scene.render.bake.use_pass_indirect = False
+        bpy.context.scene.render.bake.use_pass_color = True
+
         if col:
             nodes.active = col
             bpy.ops.object.bake(type='DIFFUSE')
@@ -289,8 +296,8 @@ class MatBake_BakeMaps(Operator):
                     bsdf_prin = n
             else:
                 if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
-                    self.report({'INFO'}, "Found multiple bsdf principled shaders in material graph")
-                    #return {'CANCELLED'}
+                    self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
+                    return {'CANCELLED'}
 
 
         in_base_col = None
@@ -298,7 +305,7 @@ class MatBake_BakeMaps(Operator):
         if len(bsdf_prin.inputs[0].links) > 0:
             in_base_col = bsdf_prin.inputs[0].links[0].from_node
         else:
-            print("in color empty")
+            self.report({'INFO'}, "Could not find BSDF Principled Base Col input")
             
 
 
@@ -345,9 +352,6 @@ classes = (
 def register():
     for cls in classes:
         bpy.utils.register_class(cls)
-
-    #bpy.utils.register_class(HelloWorldPanel)
-    
     
     bpy.types.Scene.bakery_resolution = IntProperty(
         name="Resolution",
@@ -370,14 +374,14 @@ def register():
         subtype="DIR_PATH"
         )
 
-    bpy.types.Scene.bakery_albedo = BoolProperty(
-        name="Albedo",
-        description="Bake Albedo",
+    bpy.types.Scene.bakery_col = BoolProperty(
+        name="Base Color",
+        description="Bake Base Color",
         default=True
         )
         
-    bpy.types.Scene.bakery_albedo_alpha = BoolProperty(
-        name="Alpha Albedo",
+    bpy.types.Scene.bakery_col_alpha = BoolProperty(
+        name="Alpha Base Color",
         description="Add alpha channel to base color map",
         default=False
         )
@@ -396,7 +400,7 @@ def register():
         
     bpy.types.Scene.bakery_out_uv = StringProperty(
         name="Output UV",
-        description="Select the UV Map used to bake"
+        description="Select the UV Map to be baked onto"
         )
 
     bpy.types.Scene.bakery_margin = IntProperty(
@@ -416,8 +420,8 @@ def unregister():
     del bpy.types.Scene.bakery_alpha_color
     del bpy.types.Scene.bakery_resolution
     del bpy.types.Scene.bakery_out_directory
-    del bpy.types.Scene.bakery_albedo
-    del bpy.types.Scene.bakery_albedo_alpha
+    del bpy.types.Scene.bakery_col
+    del bpy.types.Scene.bakery_col_alpha
     del bpy.types.Scene.bakery_roughness
     del bpy.types.Scene.bakery_normals
     del bpy.types.Scene.bakery_out_uv
