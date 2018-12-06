@@ -68,8 +68,14 @@ def findUVBakeNode(nodes, context):
     return node_uv_map
 
 
-#def saveTexture(context, image, format, name, dir):
-    #filepath_raw = dir + "/" + name
+def saveTexture(context, image, format, name, dir):
+    ext = ""
+    if format == 'PNG':
+        ext=".png"
+    else:
+        ext=".jpeg"
+    filepath_raw = dir + "/" + name + ext
+    print(filepath_raw)
     #image.filepath_raw = "/tmp/temp.png"
     #image.file_format = format#'PNG'
     #image.save()
@@ -187,7 +193,7 @@ class MatBake_CreateMaps(Operator):
         img_nrm = None
 
         if context.scene.bakery_col:
-            img_col = bpy.data.images.new(context.scene.bakery_tex_name + "_col", width=w, height=h)
+            img_col = bpy.data.images.new(context.scene.bakery_tex_name + "_col", width=w, height=h, alpha=context.scene.bakery_col_alpha)
         if context.scene.bakery_roughness:
             img_rgh = bpy.data.images.new(context.scene.bakery_tex_name + "_rgh", width=w, height=h)
         if context.scene.bakery_normals:
@@ -302,6 +308,7 @@ class MatBake_BakeMaps(Operator):
         if col:
             nodes.active = col
             bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
+            #saveTexture(context, col.image, context.scene.bakery_out_format, col.image.name, context.scene.bakery_out_directory)
 
         if rgh:
             nodes.active = rgh
