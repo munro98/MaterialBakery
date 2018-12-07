@@ -30,7 +30,7 @@ bl_info = {
 }
 
 
-# TODO implement multiple materials per object, break down tasks into smaller functions, move bake node graph to proper locations
+# TODO break down tasks into smaller functions, move bake node graph to proper locations
 # find node input/output by names instead of indexes?
 # save files and bake AO?
 
@@ -227,14 +227,20 @@ class MatBake_BakeMaps(Operator):
 
     @classmethod
     def poll(cls, context):
-        ob = context.active_object
+        #ob = context.active_object
 
         ob = bpy.context.active_object
-        mat = ob.data.materials[0]
-        nodes=mat.node_tree.nodes
-        node_uv_map = findUVBakeNode(nodes, context)
 
-        return (ob and ob.type == 'MESH' and context.scene.render.engine == 'CYCLES' and node_uv_map is not None) 
+        allUVNsFound = True
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            nodes=mat.node_tree.nodes
+
+            node_uv_map = findUVBakeNode(nodes, context)
+            if node_uv_map is None:
+                allUVNsFound = False
+
+        return (ob and ob.type == 'MESH' and context.scene.render.engine == 'CYCLES' and allUVNsFound and len(ob.data.materials) > 0) 
 
     def draw(self, context):
         layout = self.layout
