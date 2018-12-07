@@ -23,7 +23,7 @@ bl_info = {
     "blender": (2, 80, 0),
     "location": "Properties > Material > Material Bakery",
     "warning": "",
-    "description": "Bake out PBR texture maps",
+    "description": "Bake out Material Node graph into PBR texture maps",
     "wiki_url": ""
                 "Scripts/Material/MaterialBakery",
     "category": "Material",
@@ -32,6 +32,7 @@ bl_info = {
 
 # TODO implement multiple materials per object, break down tasks into smaller functions, move bake node graph to proper locations
 # find node input/output by names instead of indexes?
+# save files and bake AO?
 
 import bpy
 
@@ -82,7 +83,6 @@ def saveTexture(context, image, format, name, dir):
     
 
 class MatBake_Panel(bpy.types.Panel):
-    """Creates a Panel in the Object properties window"""
     bl_label = "Material Bakery"
     bl_idname = "MATBAKE_PT_main"
     bl_space_type = 'PROPERTIES'
@@ -94,14 +94,8 @@ class MatBake_Panel(bpy.types.Panel):
 
         obj = context.object
 
-        #row = layout.row()
-        #row.label(text="Hello world!", icon='WORLD_DATA')
-
         row = layout.row()
         row.label(text="Active Object: " + obj.name)
-        #row = layout.row()
-        #row.prop(obj, "name")
-        
 
         row = layout.row()
         row.prop(context.scene, "bakery_resolution")
@@ -174,23 +168,12 @@ class MatBake_CreateMaps(Operator):
         
         ob = bpy.context.active_object
 
-        # Get material
-        mat = ob.data.materials[0]
-
-        mat.use_nodes=True
-
-        nodes=mat.node_tree.nodes
-
-        # create node
-        node_uv_map = nodes.new(type='ShaderNodeUVMap')
-        node_uv_map.uv_map = context.scene.bakery_out_uv
-
-        w = context.scene.bakery_resolution
-        h = context.scene.bakery_resolution
-
         img_col = None
         img_rgh = None
         img_nrm = None
+
+        w = context.scene.bakery_resolution
+        h = context.scene.bakery_resolution
 
         if context.scene.bakery_col:
             img_col = bpy.data.images.new(context.scene.bakery_tex_name + "_col", width=w, height=h, alpha=context.scene.bakery_col_alpha)
@@ -199,24 +182,39 @@ class MatBake_CreateMaps(Operator):
         if context.scene.bakery_normals:
             img_nrm = bpy.data.images.new(context.scene.bakery_tex_name + "_nrm", width=w, height=h)
 
-        links = mat.node_tree.links
 
-        if context.scene.bakery_col:
-            col = nodes.new(type='ShaderNodeTexImage')
-            col.image = img_col
+        if len(ob.data.materials) > 0:
+            # Get material
+            for mat in ob.data.materials:
+                mat.use_nodes=True
 
-        link = links.new(node_uv_map.outputs[0], col.inputs[0])
+                nodes=mat.node_tree.nodes
 
-        rgh = nodes.new(type='ShaderNodeTexImage')
-        rgh.image = img_rgh
+                # Create node
+                node_uv_map = nodes.new(type='ShaderNodeUVMap')
+                node_uv_map.uv_map = context.scene.bakery_out_uv
 
-        link = links.new(node_uv_map.outputs[0], rgh.inputs[0])
+                links = mat.node_tree.links
 
-        nrm = nodes.new(type='ShaderNodeTexImage')
-        nrm.image = img_nrm
+                if img_col:
+                    col = nodes.new(type='ShaderNodeTexImage')
+                    col.image = img_col
+                    link = links.new(node_uv_map.outputs[0], col.inputs[0])
+                
+                if img_rgh:
+                    rgh = nodes.new(type='ShaderNodeTexImage')
+                    rgh.image = img_rgh
+                    link = links.new(node_uv_map.outputs[0], rgh.inputs[0])
 
-        link = links.new(node_uv_map.outputs[0], nrm.inputs[0])
-        
+                if img_nrm:
+                    nrm = nodes.new(type='ShaderNodeTexImage')
+                    nrm.image = img_nrm
+                    link = links.new(node_uv_map.outputs[0], nrm.inputs[0])
+
+        else:
+            self.report({'INFO'}, "No material attached to object")
+            return {'CANCELLED'}
+
         
         return{'FINISHED'}
 
@@ -250,126 +248,169 @@ class MatBake_BakeMaps(Operator):
         # initialise
         print("Executing Bake")
 
-        #if context.scene.bakery_col:
-        #    print("bake albedo")
-        #else:
-        #    print("bake")
-        
-
         ob = bpy.context.active_object
 
-        # Get material
-        mat = ob.data.materials[0]
-        links = mat.node_tree.links
-        mat.use_nodes=True
-        nodes=mat.node_tree.nodes
+        cols = [None]*len(ob.data.materials)
+        rghs = [None]*len(ob.data.materials)
+        nrms = [None]*len(ob.data.materials)
 
-        node_uv_map = findUVBakeNode(nodes, context)
+        if len(ob.data.materials) > 0:
+            # Get material
 
-        col = None
-        rgh = None
-        nrm = None
+            for i in range(0, len(ob.data.materials)):
+                mat = ob.data.materials[i]
+                mat.use_nodes=True
+                links = mat.node_tree.links
+                nodes=mat.node_tree.nodes
 
-        outCounter = 0
-        outLinks = len(node_uv_map.outputs[0].links)
+                nodes.active = None
 
-        if outCounter < outLinks:
-            for link in node_uv_map.outputs[0].links:
-                node = link.to_node
-                if node.type == 'TEX_IMAGE' and node.image.name.endswith('_col'):
-                    col = node
-                    break
-                
-        outCounter = outCounter + 1
+                node_uv_map = findUVBakeNode(nodes, context)
 
-        if outCounter < outLinks:
-            for link in node_uv_map.outputs[0].links:
-                node = link.to_node
-                if node.type == 'TEX_IMAGE' and node.image.name.endswith('_rgh'):
-                    rgh = node
-                    break
+                outCounter = 0
+                outLinks = len(node_uv_map.outputs[0].links)
 
-        outCounter = outCounter + 1
+                if outCounter < outLinks:
+                    for link in node_uv_map.outputs[0].links:
+                        node = link.to_node
+                        if node.type == 'TEX_IMAGE' and node.image.name.endswith('_col'):
+                            cols[i] = node
+                            break
+                        
+                outCounter = outCounter + 1
 
-        if outCounter < outLinks:
-            for link in node_uv_map.outputs[0].links:
-                node = link.to_node
-                if node.type == 'TEX_IMAGE' and node.image.name.endswith('_nrm'):
-                    nrm = node
-                    break
+                if outCounter < outLinks:
+                    for link in node_uv_map.outputs[0].links:
+                        node = link.to_node
+                        if node.type == 'TEX_IMAGE' and node.image.name.endswith('_rgh'):
+                            rghs[i] = node
+                            break
 
+                outCounter = outCounter + 1
 
-        nodes.active = None
+                if outCounter < outLinks:
+                    for link in node_uv_map.outputs[0].links:
+                        node = link.to_node
+                        if node.type == 'TEX_IMAGE' and node.image.name.endswith('_nrm'):
+                            nrms[i] = node
+                            break
 
+        else:
+            self.report({'INFO'}, "No material attached to object")
+            return {'CANCELLED'}
+
+        
+        #Set bake settings
         bpy.context.scene.render.bake.use_pass_direct = False
         bpy.context.scene.render.bake.use_pass_indirect = False
         bpy.context.scene.render.bake.use_pass_color = True
 
-        if col:
-            nodes.active = col
-            bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
-            #saveTexture(context, col.image, context.scene.bakery_out_format, col.image.name, context.scene.bakery_out_directory)
+        allColsFound = True
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            nodes=mat.node_tree.nodes
 
-        if rgh:
-            nodes.active = rgh
+            col=cols[i]
+            if col:
+                nodes.active = col
+            else:
+                allColsFound = False
+
+        if allColsFound:
+            bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
+
+        
+        allRghsFound = True
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            nodes=mat.node_tree.nodes
+
+            rgh=rghs[i]
+            if rgh:
+                nodes.active = rgh
+            else:
+                allRghsFound = False
+
+        if allRghsFound:
             bpy.ops.object.bake(type='ROUGHNESS', margin=context.scene.bakery_margin)
 
-
-        bsdf_prin = None
-
-        for n in nodes:
-            if bsdf_prin == None:
-                if n.type == 'BSDF_PRINCIPLED':
-                    bsdf_prin = n
-            else:
-                if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
-                    self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
-                    return {'CANCELLED'}
-
-
-        in_base_col = None
-
-        if len(bsdf_prin.inputs[0].links) > 0:
-            in_base_col = bsdf_prin.inputs[0].links[0].from_node
-        #else:
-        #    self.report({'INFO'}, "Could not find BSDF Principled Base Col input")
         
-        in_nrm = None
-        in_nrm_tex = None
+        bsdf_prins = [None]*len(ob.data.materials)
 
-        if len(bsdf_prin.inputs[17].links) > 0:
-            in_nrm = bsdf_prin.inputs[17].links[0].from_node
-            
-            if in_nrm.type == 'NORMAL_MAP':
-                if len(bsdf_prin.inputs[17].links) > 0:
-                    n = bsdf_prin.inputs[17].links[0].from_node
-                    
-                    if len(n.inputs[1].links) > 0:
-                        n2 = n.inputs[1].links[0].from_node
-                        if n2.type:
-                            in_nrm_tex = n2
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
 
-            if in_nrm_tex is not None:
-                link = links.new(in_nrm_tex.outputs[0], bsdf_prin.inputs[0])
+            links = mat.node_tree.links
+            nodes=mat.node_tree.nodes
 
-                nodes.active = nrm
-                bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
-                #save?
+            bsdf_prin = None
 
-                if in_base_col is None:
-                    links.remove(bsdf_prin.inputs[0].links[0])
+            for n in nodes:
+                if bsdf_prin == None:
+                    if n.type == 'BSDF_PRINCIPLED':
+                        bsdf_prin = n
+                        bsdf_prins[i] = n
                 else:
-                    link = links.new(in_base_col.outputs[0], bsdf_prin.inputs[0])
+                    if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
+                        self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
+                        #return {'CANCELLED'}
+
+
+        bpy.ops.ed.undo_push()
+
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            
+            links = mat.node_tree.links
+            nodes=mat.node_tree.nodes
+
+            bsdf_prin = bsdf_prins[i]
+
+            in_nrm_tex = None
+
+            if bsdf_prin and len(bsdf_prin.inputs[17].links) > 0:
+                in_nrm = bsdf_prin.inputs[17].links[0].from_node
+                
+                if in_nrm.type == 'NORMAL_MAP':
+                    if len(bsdf_prin.inputs[17].links) > 0:
+                        n = bsdf_prin.inputs[17].links[0].from_node
+                        
+                        if len(n.inputs[1].links) > 0:
+                            n2 = n.inputs[1].links[0].from_node
+                            if n2.type:
+                                in_nrm_tex = n2
+
+                if in_nrm_tex is not None and nrms[i] is not None:
+                    link = links.new(in_nrm_tex.outputs[0], bsdf_prin.inputs[0])
+
+                    #nodes.active = nrms[i]
+                else:
+                    self.report({'INFO'}, "Could not find BSDF Principled normal texture input")
             else:
-                #print("Could not find BSDF Principled normal texture input2")
-                self.report({'INFO'}, "Could not find BSDF Principled normal texture input")
+                self.report({'INFO'}, "Could not find BSDF Principled normal input node")
+
+        
+        allNrmsFound = True
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            nodes=mat.node_tree.nodes
+
+            nrm=nrms[i]
+            if nrm:
+                nodes.active = nrm
+            else:
+                allNrmsFound = False
+
+        if allNrmsFound:
+            bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
+            #print("")
         else:
-            self.report({'INFO'}, "Could not find BSDF Principled normal input node")
-            #print("Could not find BSDF Principled normal texture input")
+            self.report({'INFO'}, "Missing nrm output texture node. Skipping Normal bake")
         
+        bpy.ops.ed.undo()
+
         return{'FINISHED'}
-        
-    
+
 classes = (
     MatBake_CreateMaps,
     MatBake_BakeMaps,
