@@ -63,7 +63,7 @@ def findUVBakeNode(nodes, context):
                 node_uv_map = node
         else:
             if node.type == 'UVMAP' and node.uv_map == context.scene.bakery_out_uv:
-                print("More than 1 UVMap node found")
+                #print("More than 1 UVMap node found")
                 #self.report({'INFO'}, "More than 1 UVMap node found")
                 return None
     return node_uv_map
@@ -145,7 +145,7 @@ class MatBake_CreateMaps(Operator):
     bl_idname = 'material.mat_bake_create_maps'
     bl_label = "Create Maps"
     bl_description = "Create texture maps"
-    #bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
@@ -155,7 +155,6 @@ class MatBake_CreateMaps(Operator):
     def draw(self, context):
         layout = self.layout
         
-
         # cleaning up
         terminate(global_undo)
 
@@ -252,7 +251,7 @@ class MatBake_BakeMaps(Operator):
     
     def execute(self, context):
         # initialise
-        print("Executing Bake")
+        self.report({'INFO'}, "Executing Bake")
 
         ob = bpy.context.active_object
 
@@ -359,7 +358,7 @@ class MatBake_BakeMaps(Operator):
                 else:
                     if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
                         self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
-                        #return {'CANCELLED'}
+                        return {'CANCELLED'}
 
 
         bpy.ops.ed.undo_push()
@@ -388,8 +387,6 @@ class MatBake_BakeMaps(Operator):
 
                 if in_nrm_tex is not None and nrms[i] is not None:
                     link = links.new(in_nrm_tex.outputs[0], bsdf_prin.inputs[0])
-
-                    #nodes.active = nrms[i]
                 else:
                     self.report({'INFO'}, "Could not find BSDF Principled normal texture input")
             else:
@@ -409,7 +406,6 @@ class MatBake_BakeMaps(Operator):
 
         if allNrmsFound:
             bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
-            #print("")
         else:
             self.report({'INFO'}, "Missing nrm output texture node. Skipping Normal bake")
         
