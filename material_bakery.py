@@ -19,7 +19,7 @@
 bl_info = {
     "name": "Material Bakery",
     "author": "Nigel Munro",
-    "version": (0, 9, 0),
+    "version": (0, 9, 4),
     "blender": (2, 80, 0),
     "location": "Properties > Material > Material Bakery",
     "warning": "",
