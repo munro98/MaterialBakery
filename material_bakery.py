@@ -418,9 +418,11 @@ class MatBake_BakeMaps(Operator):
             in_nrm_tex = None
 
             if bsdf_prin and len(bsdf_prin.inputs[17].links) > 0:
-                in_nrm = bsdf_prin.inputs[17].links[0].from_node
+                in_nrm = None
+                if bsdf_prin.inputs[17].links[0].from_node is not None:
+                    in_nrm = bsdf_prin.inputs[17].links[0].from_node
                 
-                if in_nrm.type == 'NORMAL_MAP':
+                if in_nrm and in_nrm.type == 'NORMAL_MAP':
                     if len(bsdf_prin.inputs[17].links) > 0:
                         n = bsdf_prin.inputs[17].links[0].from_node
                         
