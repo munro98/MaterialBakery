@@ -32,7 +32,7 @@ bl_info = {
 
 # TODO break down tasks into smaller functions, move bake node graph to proper locations
 # find node input/output by names instead of indexes?
-# save files and bake AO?
+# save files and bake Metalic/AO?
 
 import bpy
 
@@ -112,6 +112,9 @@ class MatBake_Panel(bpy.types.Panel):
         col.prop(context.scene, "bakery_roughness")
         col = row.column()
         col.prop(context.scene, "bakery_normals")
+
+        row = layout.row()
+        row.prop(context.scene, "bakery_metallic")
         
         row = layout.row()
         row.prop_search(context.scene, "bakery_out_uv", obj.data, "uv_layers")
@@ -162,13 +165,11 @@ class MatBake_CreateMaps(Operator):
     
     def execute(self, context):
         # initialise
-        
-        print("Executing Create Maps")
-        
         ob = bpy.context.active_object
 
         img_col = None
         img_rgh = None
+        img_met = None
         img_nrm = None
 
         w = context.scene.bakery_resolution
@@ -178,6 +179,8 @@ class MatBake_CreateMaps(Operator):
             img_col = bpy.data.images.new(context.scene.bakery_tex_name + "_col", width=w, height=h, alpha=context.scene.bakery_col_alpha)
         if context.scene.bakery_roughness:
             img_rgh = bpy.data.images.new(context.scene.bakery_tex_name + "_rgh", width=w, height=h)
+        if context.scene.bakery_metallic:
+            img_met = bpy.data.images.new(context.scene.bakery_tex_name + "_met", width=w, height=h)
         if context.scene.bakery_normals:
             img_nrm = bpy.data.images.new(context.scene.bakery_tex_name + "_nrm", width=w, height=h)
 
@@ -204,6 +207,11 @@ class MatBake_CreateMaps(Operator):
                     rgh = nodes.new(type='ShaderNodeTexImage')
                     rgh.image = img_rgh
                     link = links.new(node_uv_map.outputs[0], rgh.inputs[0])
+                
+                if img_met:
+                    met = nodes.new(type='ShaderNodeTexImage')
+                    met.image = img_met
+                    link = links.new(node_uv_map.outputs[0], met.inputs[0])
 
                 if img_nrm:
                     nrm = nodes.new(type='ShaderNodeTexImage')
@@ -214,7 +222,6 @@ class MatBake_CreateMaps(Operator):
             self.report({'INFO'}, "No material attached to object")
             return {'CANCELLED'}
 
-        
         return{'FINISHED'}
 
 
@@ -227,7 +234,6 @@ class MatBake_BakeMaps(Operator):
     @classmethod
     def poll(cls, context):
         #ob = context.active_object
-
         ob = bpy.context.active_object
 
         allUVNsFound = True
@@ -251,12 +257,12 @@ class MatBake_BakeMaps(Operator):
     
     def execute(self, context):
         # initialise
-        self.report({'INFO'}, "Executing Bake")
 
         ob = bpy.context.active_object
 
         cols = [None]*len(ob.data.materials)
         rghs = [None]*len(ob.data.materials)
+        mets = [None]*len(ob.data.materials)
         nrms = [None]*len(ob.data.materials)
 
         if len(ob.data.materials) > 0:
@@ -272,33 +278,31 @@ class MatBake_BakeMaps(Operator):
 
                 node_uv_map = findUVBakeNode(nodes, context)
 
-                outCounter = 0
                 outLinks = len(node_uv_map.outputs[0].links)
 
-                if outCounter < outLinks:
-                    for link in node_uv_map.outputs[0].links:
-                        node = link.to_node
-                        if node.type == 'TEX_IMAGE' and node.image.name.endswith('_col'):
-                            cols[i] = node
-                            break
+                for link in node_uv_map.outputs[0].links:
+                    node = link.to_node
+                    if node.type == 'TEX_IMAGE' and node.image.name.endswith('_col'):
+                        cols[i] = node
+                        break
                         
-                outCounter = outCounter + 1
+                for link in node_uv_map.outputs[0].links:
+                    node = link.to_node
+                    if node.type == 'TEX_IMAGE' and node.image.name.endswith('_rgh'):
+                        rghs[i] = node
+                        break
 
-                if outCounter < outLinks:
-                    for link in node_uv_map.outputs[0].links:
-                        node = link.to_node
-                        if node.type == 'TEX_IMAGE' and node.image.name.endswith('_rgh'):
-                            rghs[i] = node
-                            break
+                for link in node_uv_map.outputs[0].links:
+                    node = link.to_node
+                    if node.type == 'TEX_IMAGE' and node.image.name.endswith('_met'):
+                        mets[i] = node
+                        break
 
-                outCounter = outCounter + 1
-
-                if outCounter < outLinks:
-                    for link in node_uv_map.outputs[0].links:
-                        node = link.to_node
-                        if node.type == 'TEX_IMAGE' and node.image.name.endswith('_nrm'):
-                            nrms[i] = node
-                            break
+                for link in node_uv_map.outputs[0].links:
+                    node = link.to_node
+                    if node.type == 'TEX_IMAGE' and node.image.name.endswith('_nrm'):
+                        nrms[i] = node
+                        break
 
         else:
             self.report({'INFO'}, "No material attached to object")
@@ -360,8 +364,48 @@ class MatBake_BakeMaps(Operator):
                         self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
                         return {'CANCELLED'}
 
-
+        #From here shader graph can be modified
         bpy.ops.ed.undo_push()
+
+        
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            links = mat.node_tree.links
+            nodes=mat.node_tree.nodes
+            bsdf_prin = bsdf_prins[i]
+
+            in_met = None
+            in_from_sock = None
+
+            if bsdf_prin and len(bsdf_prin.inputs[4].links) > 0:
+                in_met = bsdf_prin.inputs[4].links[0].from_node
+                in_from_sock = bsdf_prin.inputs[4].links[0].from_socket
+
+            if in_met is not None:
+                    link = links.new(in_met.outputs[0], bsdf_prin.inputs[7]) #Maybe a bug here?
+                #else:
+                    #self.report({'INFO'}, "Could not find BSDF Principled Metalic texture input")
+            elif bsdf_prin is not None:
+                if len(bsdf_prin.inputs[7].links) > 0:
+                    links.remove(bsdf_prin.inputs[7].links[0])
+                bsdf_prin.inputs[7].default_value = bsdf_prin.inputs[4].default_value
+
+
+
+        allMetsFound = True
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+            nodes=mat.node_tree.nodes
+
+            met=mets[i]
+            if met:
+                nodes.active = met
+            else:
+                allMetsFound = False
+
+        if allMetsFound:
+            bpy.ops.object.bake(type='ROUGHNESS', margin=context.scene.bakery_margin)
+
 
         for i in range(0, len(ob.data.materials)):
             mat = ob.data.materials[i]
@@ -385,7 +429,7 @@ class MatBake_BakeMaps(Operator):
                             if n2.type:
                                 in_nrm_tex = n2
 
-                if in_nrm_tex is not None and nrms[i] is not None:
+                if in_nrm_tex is not None:
                     link = links.new(in_nrm_tex.outputs[0], bsdf_prin.inputs[0])
                 else:
                     self.report({'INFO'}, "Could not find BSDF Principled normal texture input")
@@ -467,6 +511,12 @@ def register():
         description="Bake Normals",
         default=True
         )
+
+    bpy.types.Scene.bakery_metallic = BoolProperty(
+        name="Metallic",
+        description="Bake Metallic",
+        default=False
+        )
         
     bpy.types.Scene.bakery_out_uv = StringProperty(
         name="Output UV",
@@ -499,7 +549,6 @@ def register():
 def unregister():
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    #bpy.utils.unregister_class(HelloWorldPanel)
     
     del bpy.types.Scene.bakery_alpha_color
     del bpy.types.Scene.bakery_resolution
@@ -508,6 +557,7 @@ def unregister():
     del bpy.types.Scene.bakery_col_alpha
     del bpy.types.Scene.bakery_roughness
     del bpy.types.Scene.bakery_normals
+    del bpy.types.Scene.bakery_metallic
     del bpy.types.Scene.bakery_out_uv
     del bpy.types.Scene.bakery_tex_name
     del bpy.types.Scene.bakery_margin
