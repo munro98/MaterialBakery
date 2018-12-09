@@ -74,12 +74,11 @@ def saveTexture(context, image, format, name, dir):
     if format == 'PNG':
         ext=".png"
     else:
-        ext=".jpeg"
-    filepath_raw = dir + "/" + name + ext
-    print(filepath_raw)
-    #image.filepath_raw = "/tmp/temp.png"
-    #image.file_format = format#'PNG'
-    #image.save()
+        ext=".jpg"
+    filepath_raw = dir + name + ext
+    image.filepath_raw = filepath_raw
+    image.file_format = format
+    image.save()
     
 
 class MatBake_Panel(bpy.types.Panel):
@@ -327,6 +326,9 @@ class MatBake_BakeMaps(Operator):
 
         if allColsFound:
             bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
+            if context.scene.bakery_out_directory != "":
+                img = cols[0].image
+                saveTexture(context, img, context.scene.bakery_out_format, img.name, context.scene.bakery_out_directory)
 
         
         allRghsFound = True
@@ -342,6 +344,9 @@ class MatBake_BakeMaps(Operator):
 
         if allRghsFound:
             bpy.ops.object.bake(type='ROUGHNESS', margin=context.scene.bakery_margin)
+            if context.scene.bakery_out_directory != "":
+                img = rghs[0].image
+                saveTexture(context, img, context.scene.bakery_out_format, img.name, context.scene.bakery_out_directory)
 
         
         bsdf_prins = [None]*len(ob.data.materials)
@@ -405,6 +410,9 @@ class MatBake_BakeMaps(Operator):
 
         if allMetsFound:
             bpy.ops.object.bake(type='ROUGHNESS', margin=context.scene.bakery_margin)
+            if context.scene.bakery_out_directory != "":
+                img = mets[0].image
+                saveTexture(context, img, context.scene.bakery_out_format, img.name, context.scene.bakery_out_directory)
 
 
         for i in range(0, len(ob.data.materials)):
@@ -452,10 +460,15 @@ class MatBake_BakeMaps(Operator):
 
         if allNrmsFound:
             bpy.ops.object.bake(type='DIFFUSE', margin=context.scene.bakery_margin)
+            if context.scene.bakery_out_directory != "":
+                img = nrms[0].image
+                saveTexture(context, img, context.scene.bakery_out_format, img.name, context.scene.bakery_out_directory)
         else:
             self.report({'INFO'}, "Missing nrm output texture node. Skipping Normal bake")
         
         bpy.ops.ed.undo()
+
+        
 
         return{'FINISHED'}
 
@@ -485,7 +498,7 @@ def register():
         max=1.0)
         
     bpy.types.Scene.bakery_out_directory = StringProperty(
-        name="Output",
+        name="Output(Optional)",
         description="Output Drectory for created map",
         subtype="DIR_PATH"
         )
