@@ -19,7 +19,7 @@
 bl_info = {
     "name": "Material Bakery",
     "author": "Nigel Munro",
-    "version": (0, 9, 4),
+    "version": (0, 9, 8),
     "blender": (2, 80, 0),
     "location": "Properties > Material > Material Bakery",
     "warning": "",
@@ -30,9 +30,9 @@ bl_info = {
 }
 
 
-# TODO break down tasks into smaller functions, move bake node graph to proper locations
+# TODO Move bake graph to proper location
 # find node input/output by names instead of indexes?
-# save files and bake Metalic/AO?
+# bake AO?
 
 import bpy
 
@@ -307,12 +307,43 @@ class MatBake_BakeMaps(Operator):
             self.report({'INFO'}, "No material attached to object")
             return {'CANCELLED'}
 
+        #From here shader graph can be modified
+        bpy.ops.ed.undo_push()
+
+        bsdf_prins = [None]*len(ob.data.materials)
+        bsdf_metvals = [0]*len(ob.data.materials)
+        bsdf_metins = [None]*len(ob.data.materials)
+        # Find principled shaders
+        for i in range(0, len(ob.data.materials)):
+            mat = ob.data.materials[i]
+
+            links = mat.node_tree.links
+            nodes=mat.node_tree.nodes
+
+            bsdf_prin = None
+
+            for n in nodes:
+                if bsdf_prin == None:
+                    if n.type == 'BSDF_PRINCIPLED':
+                        bsdf_prin = n
+                        bsdf_prins[i] = n
+                        bsdf_metvals[i] = n.inputs[4].default_value
+                        n.inputs[4].default_value = 0.0
+                        if len(bsdf_prin.inputs[4].links) > 0:
+                            bsdf_metins[i] = n.inputs[4].links[0].from_node
+                            links.remove(bsdf_prin.inputs[4].links[0])
+
+                else:
+                    if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
+                        self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
+                        return {'CANCELLED'}
         
         #Set bake settings
-        bpy.context.scene.render.bake.use_pass_direct = False
+        bpy.context.scene.render.bake.use_pass_direct = False #TODO change to just context
         bpy.context.scene.render.bake.use_pass_indirect = False
         bpy.context.scene.render.bake.use_pass_color = True
 
+        
         allColsFound = True
         for i in range(0, len(ob.data.materials)):
             mat = ob.data.materials[i]
@@ -348,53 +379,28 @@ class MatBake_BakeMaps(Operator):
                 img = rghs[0].image
                 saveTexture(context, img, context.scene.bakery_out_format, img.name, context.scene.bakery_out_directory)
 
-        
-        bsdf_prins = [None]*len(ob.data.materials)
 
-        for i in range(0, len(ob.data.materials)):
-            mat = ob.data.materials[i]
-
-            links = mat.node_tree.links
-            nodes=mat.node_tree.nodes
-
-            bsdf_prin = None
-
-            for n in nodes:
-                if bsdf_prin == None:
-                    if n.type == 'BSDF_PRINCIPLED':
-                        bsdf_prin = n
-                        bsdf_prins[i] = n
-                else:
-                    if bsdf_prin != None and n.type == 'BSDF_PRINCIPLED':
-                        self.report({'INFO'}, "Found multiple BSDF Principled shaders in material graph")
-                        return {'CANCELLED'}
-
-        #From here shader graph can be modified
-        bpy.ops.ed.undo_push()
-
-        
         for i in range(0, len(ob.data.materials)):
             mat = ob.data.materials[i]
             links = mat.node_tree.links
             nodes=mat.node_tree.nodes
             bsdf_prin = bsdf_prins[i]
 
-            in_met = None
-            in_from_sock = None
+            in_met = bsdf_metins[i]
+            #in_from_sock = None
 
-            if bsdf_prin and len(bsdf_prin.inputs[4].links) > 0:
-                in_met = bsdf_prin.inputs[4].links[0].from_node
-                in_from_sock = bsdf_prin.inputs[4].links[0].from_socket
+            #if bsdf_prin and len(bsdf_prin.inputs[4].links) > 0:
+            #    in_met = bsdf_prin.inputs[4].links[0].from_node
+            #    in_from_sock = bsdf_prin.inputs[4].links[0].from_socket
 
             if in_met is not None:
                     link = links.new(in_met.outputs[0], bsdf_prin.inputs[7]) #Maybe a bug here?
                 #else:
-                    #self.report({'INFO'}, "Could not find BSDF Principled Metalic texture input")
+                    #self.report({'INFO'}, "Could not find BSDF Principled Metalic input")
             elif bsdf_prin is not None:
                 if len(bsdf_prin.inputs[7].links) > 0:
                     links.remove(bsdf_prin.inputs[7].links[0])
-                bsdf_prin.inputs[7].default_value = bsdf_prin.inputs[4].default_value
-
+                bsdf_prin.inputs[7].default_value = bsdf_metvals[i]#bsdf_prin.inputs[4].default_value
 
 
         allMetsFound = True
