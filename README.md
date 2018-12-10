@@ -5,7 +5,7 @@ Material Bakery executes Cycles baking on the Principled BSDF shader allowing yo
 
 ![example1](https://raw.githubusercontent.com/munro98/MaterialBakery/master/example1.jpg)
 
-Usage
+# Usage
 Install addon
 Set up a material graph with a single Principled BSDF shader.
 Set up a sperate UV texture coordinates used only for baking to.
@@ -16,6 +16,5 @@ The created textures will be postfixed with "_rgh", "_col", ect which is what Ma
 A bake node tree will also then be created in each of the materials attached to the object that will be used to bake to.
 
 When Bake is clicked Material Bakery will find the image texture maps inside the created bake node tree and bake to them.
-
 
 ![example2](https://raw.githubusercontent.com/munro98/MaterialBakery/master/example2.jpg)
